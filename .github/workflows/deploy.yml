@@ -19,11 +19,10 @@ jobs:
           apt-get update
           apt-get install -y sshpass
 
-      - name: Deploy to server
+      - name: Create deployment script
         env:
           SERVER_USER: ${{ secrets.SERVER_USER }}
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
-          SERVER_PASSWORD: ${{ secrets.SERVER_PASSWORD }}
           BASE_RPC_URL: ${{ secrets.BASE_RPC_URL }}
           LIQUID_FACTORY_ADDRESS: ${{ secrets.LIQUID_FACTORY_ADDRESS }}
           START_BLOCK: ${{ secrets.START_BLOCK }}
@@ -32,10 +31,9 @@ jobs:
           IPFS_GATEWAY: ${{ secrets.IPFS_GATEWAY }}
           POLL_INTERVAL: ${{ secrets.POLL_INTERVAL }}
         run: |
-          mkdir -p ~/.ssh
-          ssh-keyscan -H $SERVER_HOST >> ~/.ssh/known_hosts 2>/dev/null || true
-
-          sshpass -p "$SERVER_PASSWORD" ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST << 'REMOTEOF'
+          cat > /tmp/deploy.sh << 'SCRIPTEOF'
+          #!/bin/bash
+          set -e
           mkdir -p /app/liquid-launch-bot
           cd /app/liquid-launch-bot
 
@@ -45,7 +43,7 @@ jobs:
             git clone https://github.com/Ml0cker/liquid-launch-bot.git .
           fi
 
-          cat > .env << EOF
+          cat > .env << ENVEOF
           BASE_RPC_URL=$BASE_RPC_URL
           LIQUID_FACTORY_ADDRESS=$LIQUID_FACTORY_ADDRESS
           START_BLOCK=$START_BLOCK
@@ -53,13 +51,17 @@ jobs:
           TELEGRAM_CHAT_ID=$TELEGRAM_CHAT_ID
           IPFS_GATEWAY=$IPFS_GATEWAY
           POLL_INTERVAL=$POLL_INTERVAL
-          EOF
+          ENVEOF
 
           docker-compose down 2>/dev/null || true
           docker-compose up -d --build
           sleep 5
           docker-compose logs bot | tail -20
-          REMOTEOF
+          SCRIPTEOF
+
+          chmod +x /tmp/deploy.sh
+          sshpass -p "${{ secrets.SERVER_PASSWORD }}" scp -o StrictHostKeyChecking=no /tmp/deploy.sh $SERVER_USER@$SERVER_HOST:/tmp/deploy.sh
+          sshpass -p "${{ secrets.SERVER_PASSWORD }}" ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST /tmp/deploy.sh
 
       - name: Notify success
         if: success()
@@ -68,4 +70,5 @@ jobs:
       - name: Notify failure
         if: failure()
         run: echo "❌ Deployment failed"
+
 
