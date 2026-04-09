@@ -14,15 +14,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Install SSH dependencies
-        run: |
-          apt-get update
-          apt-get install -y sshpass
-
-      - name: Create deployment script
+      - name: Deploy to server
         env:
           SERVER_USER: ${{ secrets.SERVER_USER }}
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_PASSWORD: ${{ secrets.SERVER_PASSWORD }}
           BASE_RPC_URL: ${{ secrets.BASE_RPC_URL }}
           LIQUID_FACTORY_ADDRESS: ${{ secrets.LIQUID_FACTORY_ADDRESS }}
           START_BLOCK: ${{ secrets.START_BLOCK }}
@@ -31,8 +27,15 @@ jobs:
           IPFS_GATEWAY: ${{ secrets.IPFS_GATEWAY }}
           POLL_INTERVAL: ${{ secrets.POLL_INTERVAL }}
         run: |
-          cat > /tmp/deploy.sh << 'SCRIPTEOF'
-          #!/bin/bash
+          python3 << 'PYEOF'
+          import subprocess
+          import os
+
+          host = os.environ['SERVER_HOST']
+          user = os.environ['SERVER_USER']
+          password = os.environ['SERVER_PASSWORD']
+
+          deploy_script = f"""
           set -e
           mkdir -p /app/liquid-launch-bot
           cd /app/liquid-launch-bot
@@ -43,25 +46,42 @@ jobs:
             git clone https://github.com/Ml0cker/liquid-launch-bot.git .
           fi
 
-          cat > .env << ENVEOF
-          BASE_RPC_URL=$BASE_RPC_URL
-          LIQUID_FACTORY_ADDRESS=$LIQUID_FACTORY_ADDRESS
-          START_BLOCK=$START_BLOCK
-          TELEGRAM_BOT_TOKEN=$TELEGRAM_BOT_TOKEN
-          TELEGRAM_CHAT_ID=$TELEGRAM_CHAT_ID
-          IPFS_GATEWAY=$IPFS_GATEWAY
-          POLL_INTERVAL=$POLL_INTERVAL
+          cat > .env << 'ENVEOF'
+          BASE_RPC_URL={os.environ['BASE_RPC_URL']}
+          LIQUID_FACTORY_ADDRESS={os.environ['LIQUID_FACTORY_ADDRESS']}
+          START_BLOCK={os.environ['START_BLOCK']}
+          TELEGRAM_BOT_TOKEN={os.environ['TELEGRAM_BOT_TOKEN']}
+          TELEGRAM_CHAT_ID={os.environ['TELEGRAM_CHAT_ID']}
+          IPFS_GATEWAY={os.environ['IPFS_GATEWAY']}
+          POLL_INTERVAL={os.environ['POLL_INTERVAL']}
           ENVEOF
 
           docker-compose down 2>/dev/null || true
           docker-compose up -d --build
           sleep 5
           docker-compose logs bot | tail -20
-          SCRIPTEOF
+          """
 
-          chmod +x /tmp/deploy.sh
-          sshpass -p "${{ secrets.SERVER_PASSWORD }}" scp -o StrictHostKeyChecking=no /tmp/deploy.sh $SERVER_USER@$SERVER_HOST:/tmp/deploy.sh
-          sshpass -p "${{ secrets.SERVER_PASSWORD }}" ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST /tmp/deploy.sh
+          # Write script to temp file
+          with open('/tmp/deploy.sh', 'w') as f:
+            f.write(deploy_script)
+
+          # Execute via SSH with password
+          proc = subprocess.Popen(
+            ['sshpass', '-p', password, 'ssh', '-o', 'StrictHostKeyChecking=no', f'{user}@{host}', 'bash'],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+          )
+          stdout, stderr = proc.communicate(input=deploy_script)
+          print(stdout)
+          if stderr:
+            print("STDERR:", stderr)
+          if proc.returncode != 0:
+            print(f"Error: SSH returned {proc.returncode}")
+            exit(proc.returncode)
+          PYEOF
 
       - name: Notify success
         if: success()
@@ -70,5 +90,6 @@ jobs:
       - name: Notify failure
         if: failure()
         run: echo "❌ Deployment failed"
+
 
 
