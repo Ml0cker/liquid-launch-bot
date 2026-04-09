@@ -14,17 +14,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Install SSH key
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SERVER_SSH_KEY }}" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
-
       - name: Deploy to server
         env:
           SERVER_USER: ${{ secrets.SERVER_USER }}
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_PASSWORD: ${{ secrets.SERVER_PASSWORD }}
           BASE_RPC_URL: ${{ secrets.BASE_RPC_URL }}
           LIQUID_FACTORY_ADDRESS: ${{ secrets.LIQUID_FACTORY_ADDRESS }}
           START_BLOCK: ${{ secrets.START_BLOCK }}
@@ -33,7 +27,10 @@ jobs:
           IPFS_GATEWAY: ${{ secrets.IPFS_GATEWAY }}
           POLL_INTERVAL: ${{ secrets.POLL_INTERVAL }}
         run: |
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST << EOF
+          mkdir -p ~/.ssh
+          ssh-keyscan -H $SERVER_HOST >> ~/.ssh/known_hosts 2>/dev/null || true
+
+          sshpass -p "$SERVER_PASSWORD" ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST << EOF
           mkdir -p /app/liquid-launch-bot
           cd /app/liquid-launch-bot
 
