@@ -21,12 +21,18 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           password: ${{ secrets.SERVER_PASSWORD }}
           script: |
-            cd /app/liquid-launch-bot || mkdir -p /app/liquid-launch-bot && cd /app/liquid-launch-bot
+            mkdir -p /app/liquid-launch-bot
+            cd /app/liquid-launch-bot
 
-            git clone https://github.com/Ml0cker/liquid-launch-bot.git . 2>/dev/null || git pull origin main
+            # Clone or pull repo
+            if [ -d .git ]; then
+              git pull origin main
+            else
+              git clone https://github.com/Ml0cker/liquid-launch-bot.git .
+            fi
 
-            # Create .env file from secrets
-            cat > .env << 'ENVEOF'
+            # Create .env file
+            cat > .env << EOF
             BASE_RPC_URL=${{ secrets.BASE_RPC_URL }}
             LIQUID_FACTORY_ADDRESS=${{ secrets.LIQUID_FACTORY_ADDRESS }}
             START_BLOCK=${{ secrets.START_BLOCK }}
@@ -34,7 +40,7 @@ jobs:
             TELEGRAM_CHAT_ID=${{ secrets.TELEGRAM_CHAT_ID }}
             IPFS_GATEWAY=${{ secrets.IPFS_GATEWAY }}
             POLL_INTERVAL=${{ secrets.POLL_INTERVAL }}
-            ENVEOF
+            EOF
 
             # Deploy
             docker-compose down 2>/dev/null || true
@@ -51,5 +57,4 @@ jobs:
       - name: Notify failure
         if: failure()
         run: echo "❌ Deployment failed"
-
 
