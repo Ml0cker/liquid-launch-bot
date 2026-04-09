@@ -57,7 +57,8 @@ jobs:
           docker-compose logs bot | tail -20
           SCRIPTEOF
           chmod +x /tmp/deploy.sh
-          sshpass -p "$SERVER_PASSWORD" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $SERVER_USER@$SERVER_HOST bash /tmp/deploy.sh
+          sshpass -p "$SERVER_PASSWORD" scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null /tmp/deploy.sh $SERVER_USER@$SERVER_HOST:/tmp/deploy.sh
+          sshpass -p "$SERVER_PASSWORD" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $SERVER_USER@$SERVER_HOST /tmp/deploy.sh
 
       - name: Notify success
         if: success()
