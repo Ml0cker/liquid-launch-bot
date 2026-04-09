@@ -14,41 +14,40 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
+      - name: Install SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SERVER_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+
       - name: Deploy to server
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          password: ${{ secrets.SERVER_PASSWORD }}
-          script: |
-            mkdir -p /app/liquid-launch-bot
-            cd /app/liquid-launch-bot
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'DEPLOY_SCRIPT'
+          mkdir -p /app/liquid-launch-bot
+          cd /app/liquid-launch-bot
 
-            # Clone or pull repo
-            if [ -d .git ]; then
-              git pull origin main
-            else
-              git clone https://github.com/Ml0cker/liquid-launch-bot.git .
-            fi
+          if [ -d .git ]; then
+            git pull origin main
+          else
+            git clone https://github.com/Ml0cker/liquid-launch-bot.git .
+          fi
 
-            # Create .env file
-            cat > .env << EOF
-            BASE_RPC_URL=${{ secrets.BASE_RPC_URL }}
-            LIQUID_FACTORY_ADDRESS=${{ secrets.LIQUID_FACTORY_ADDRESS }}
-            START_BLOCK=${{ secrets.START_BLOCK }}
-            TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
-            TELEGRAM_CHAT_ID=${{ secrets.TELEGRAM_CHAT_ID }}
-            IPFS_GATEWAY=${{ secrets.IPFS_GATEWAY }}
-            POLL_INTERVAL=${{ secrets.POLL_INTERVAL }}
-            EOF
+          cat > .env << EOF
+          BASE_RPC_URL=${{ secrets.BASE_RPC_URL }}
+          LIQUID_FACTORY_ADDRESS=${{ secrets.LIQUID_FACTORY_ADDRESS }}
+          START_BLOCK=${{ secrets.START_BLOCK }}
+          TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID=${{ secrets.TELEGRAM_CHAT_ID }}
+          IPFS_GATEWAY=${{ secrets.IPFS_GATEWAY }}
+          POLL_INTERVAL=${{ secrets.POLL_INTERVAL }}
+          EOF
 
-            # Deploy
-            docker-compose down 2>/dev/null || true
-            docker-compose up -d --build
-
-            # Show logs
-            sleep 5
-            docker-compose logs bot | tail -20
+          docker-compose down 2>/dev/null || true
+          docker-compose up -d --build
+          sleep 5
+          docker-compose logs bot | tail -20
+          DEPLOY_SCRIPT
 
       - name: Notify success
         if: success()
