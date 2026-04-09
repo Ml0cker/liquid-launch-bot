@@ -35,7 +35,7 @@ jobs:
           mkdir -p ~/.ssh
           ssh-keyscan -H $SERVER_HOST >> ~/.ssh/known_hosts 2>/dev/null || true
 
-          sshpass -p "$SERVER_PASSWORD" ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST << 'EOF'
+          sshpass -p "$SERVER_PASSWORD" ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST << 'REMOTEOF'
           mkdir -p /app/liquid-launch-bot
           cd /app/liquid-launch-bot
 
@@ -45,7 +45,7 @@ jobs:
             git clone https://github.com/Ml0cker/liquid-launch-bot.git .
           fi
 
-          cat > .env << 'ENVEOF'
+          cat > .env << EOF
           BASE_RPC_URL=$BASE_RPC_URL
           LIQUID_FACTORY_ADDRESS=$LIQUID_FACTORY_ADDRESS
           START_BLOCK=$START_BLOCK
@@ -53,13 +53,13 @@ jobs:
           TELEGRAM_CHAT_ID=$TELEGRAM_CHAT_ID
           IPFS_GATEWAY=$IPFS_GATEWAY
           POLL_INTERVAL=$POLL_INTERVAL
-          ENVEOF
+          EOF
 
           docker-compose down 2>/dev/null || true
           docker-compose up -d --build
           sleep 5
           docker-compose logs bot | tail -20
-          EOF
+          REMOTEOF
 
       - name: Notify success
         if: success()
