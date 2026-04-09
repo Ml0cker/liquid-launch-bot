@@ -14,42 +14,25 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Install sshpass
+      - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y sshpass
+          sudo apt-get install -y sshpass openssh-client
 
-      - name: Generate SSH key
-        run: |
-          ssh-keygen -t rsa -b 4096 -f ~/.ssh/id_rsa -N "" -C "github-actions"
-          cat ~/.ssh/id_rsa.pub
-
-      - name: Add SSH key to server
+      - name: Test server connectivity
         env:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
           SERVER_USER: ${{ secrets.SERVER_USER }}
           SERVER_PASSWORD: ${{ secrets.SERVER_PASSWORD }}
         run: |
-          mkdir -p ~/.ssh
-          ssh-keyscan -H $SERVER_HOST >> ~/.ssh/known_hosts 2>/dev/null || true
-
-          # Try to add SSH key using expect-like approach
-          (
-            sleep 1
-            echo "$SERVER_PASSWORD"
-            sleep 1
-            echo "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys"
-            sleep 1
-            cat ~/.ssh/id_rsa.pub
-            sleep 1
-            echo ""
-            sleep 1
-          ) | sshpass -p "$SERVER_PASSWORD" ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST 2>&1 | head -20 || true
+          echo "Testing connectivity to $SERVER_USER@$SERVER_HOST..."
+          timeout 10 bash -c "exec 3<>/dev/tcp/$SERVER_HOST/22; cat <&3" 2>&1 | head -1 || echo "Connection test completed"
 
       - name: Deploy via SSH
         env:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
           SERVER_USER: ${{ secrets.SERVER_USER }}
+          SERVER_PASSWORD: ${{ secrets.SERVER_PASSWORD }}
           BASE_RPC_URL: ${{ secrets.BASE_RPC_URL }}
           LIQUID_FACTORY_ADDRESS: ${{ secrets.LIQUID_FACTORY_ADDRESS }}
           START_BLOCK: ${{ secrets.START_BLOCK }}
@@ -61,7 +44,9 @@ jobs:
           mkdir -p ~/.ssh
           ssh-keyscan -H $SERVER_HOST >> ~/.ssh/known_hosts 2>/dev/null || true
 
-          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST << 'EOFSCRIPT'
+          # Create deployment script
+          cat > /tmp/deploy.sh << 'DEPLOYEOF'
+          #!/bin/bash
           set -e
           mkdir -p /app/liquid-launch-bot
           cd /app/liquid-launch-bot
@@ -72,7 +57,7 @@ jobs:
             git clone https://github.com/Ml0cker/liquid-launch-bot.git .
           fi
 
-          cat > .env << EOFENV
+          cat > .env << ENVEOF
           BASE_RPC_URL=$BASE_RPC_URL
           LIQUID_FACTORY_ADDRESS=$LIQUID_FACTORY_ADDRESS
           START_BLOCK=$START_BLOCK
@@ -80,13 +65,19 @@ jobs:
           TELEGRAM_CHAT_ID=$TELEGRAM_CHAT_ID
           IPFS_GATEWAY=$IPFS_GATEWAY
           POLL_INTERVAL=$POLL_INTERVAL
-          EOFENV
+          ENVEOF
 
           docker-compose down 2>/dev/null || true
           docker-compose up -d --build
           sleep 5
           docker-compose logs bot | tail -20
-          EOFSCRIPT
+          DEPLOYEOF
+
+          chmod +x /tmp/deploy.sh
+
+          # Execute deployment
+          export SSHPASS="$SERVER_PASSWORD"
+          sshpass -e ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $SERVER_USER@$SERVER_HOST 'bash -s' < /tmp/deploy.sh
 
       - name: Notify success
         if: success()
@@ -95,6 +86,7 @@ jobs:
       - name: Notify failure
         if: failure()
         run: echo "❌ Deployment failed"
+
 
 
 
