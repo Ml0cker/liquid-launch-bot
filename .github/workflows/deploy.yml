@@ -19,11 +19,26 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y sshpass
 
-      - name: Deploy via SSH
+      - name: Generate SSH key
+        run: |
+          ssh-keygen -t rsa -b 4096 -f ~/.ssh/id_rsa -N "" -C "github-actions"
+          cat ~/.ssh/id_rsa.pub
+
+      - name: Add SSH key to server
         env:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
           SERVER_USER: ${{ secrets.SERVER_USER }}
           SERVER_PASSWORD: ${{ secrets.SERVER_PASSWORD }}
+        run: |
+          export SSHPASS="$SERVER_PASSWORD"
+          mkdir -p ~/.ssh
+          ssh-keyscan -H $SERVER_HOST >> ~/.ssh/known_hosts 2>/dev/null || true
+          sshpass -e ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys" < ~/.ssh/id_rsa.pub
+
+      - name: Deploy via SSH
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
           BASE_RPC_URL: ${{ secrets.BASE_RPC_URL }}
           LIQUID_FACTORY_ADDRESS: ${{ secrets.LIQUID_FACTORY_ADDRESS }}
           START_BLOCK: ${{ secrets.START_BLOCK }}
@@ -32,23 +47,21 @@ jobs:
           IPFS_GATEWAY: ${{ secrets.IPFS_GATEWAY }}
           POLL_INTERVAL: ${{ secrets.POLL_INTERVAL }}
         run: |
-          # Escape password for sshpass
-          export SSHPASS="$SERVER_PASSWORD"
+          mkdir -p ~/.ssh
+          ssh-keyscan -H $SERVER_HOST >> ~/.ssh/known_hosts 2>/dev/null || true
 
-          echo "Testing SSH connection to $SERVER_USER@$SERVER_HOST..."
-          sshpass -e ssh -v -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $SERVER_USER@$SERVER_HOST "echo 'SSH connection successful'" 2>&1 | head -20 || true
-
-          cat > /tmp/deploy.sh << 'SCRIPTEOF'
-          #!/bin/bash
+          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST << 'EOFSCRIPT'
           set -e
           mkdir -p /app/liquid-launch-bot
           cd /app/liquid-launch-bot
+
           if [ -d .git ]; then
             git pull origin main
           else
             git clone https://github.com/Ml0cker/liquid-launch-bot.git .
           fi
-          cat > .env << ENVEOF
+
+          cat > .env << EOFENV
           BASE_RPC_URL=$BASE_RPC_URL
           LIQUID_FACTORY_ADDRESS=$LIQUID_FACTORY_ADDRESS
           START_BLOCK=$START_BLOCK
@@ -56,17 +69,13 @@ jobs:
           TELEGRAM_CHAT_ID=$TELEGRAM_CHAT_ID
           IPFS_GATEWAY=$IPFS_GATEWAY
           POLL_INTERVAL=$POLL_INTERVAL
-          ENVEOF
+          EOFENV
+
           docker-compose down 2>/dev/null || true
           docker-compose up -d --build
           sleep 5
           docker-compose logs bot | tail -20
-          SCRIPTEOF
-          chmod +x /tmp/deploy.sh
-          echo "Transferring script..."
-          sshpass -e scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null /tmp/deploy.sh $SERVER_USER@$SERVER_HOST:/tmp/deploy.sh
-          echo "Executing script..."
-          sshpass -e ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $SERVER_USER@$SERVER_HOST /tmp/deploy.sh
+          EOFSCRIPT
 
       - name: Notify success
         if: success()
@@ -75,6 +84,7 @@ jobs:
       - name: Notify failure
         if: failure()
         run: echo "❌ Deployment failed"
+
 
 
 
