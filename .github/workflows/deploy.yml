@@ -14,36 +14,48 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
+      - name: Install sshpass
+        run: apt-get update && apt-get install -y sshpass
+
       - name: Deploy via SSH
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          password: ${{ secrets.SERVER_PASSWORD }}
-          script: |
-            mkdir -p /app/liquid-launch-bot
-            cd /app/liquid-launch-bot
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SERVER_PASSWORD: ${{ secrets.SERVER_PASSWORD }}
+          BASE_RPC_URL: ${{ secrets.BASE_RPC_URL }}
+          LIQUID_FACTORY_ADDRESS: ${{ secrets.LIQUID_FACTORY_ADDRESS }}
+          START_BLOCK: ${{ secrets.START_BLOCK }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          IPFS_GATEWAY: ${{ secrets.IPFS_GATEWAY }}
+          POLL_INTERVAL: ${{ secrets.POLL_INTERVAL }}
+        run: |
+          sshpass -p "$SERVER_PASSWORD" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $SERVER_USER@$SERVER_HOST << 'EOFSCRIPT'
+          set -e
+          mkdir -p /app/liquid-launch-bot
+          cd /app/liquid-launch-bot
 
-            if [ -d .git ]; then
-              git pull origin main
-            else
-              git clone https://github.com/Ml0cker/liquid-launch-bot.git .
-            fi
+          if [ -d .git ]; then
+            git pull origin main
+          else
+            git clone https://github.com/Ml0cker/liquid-launch-bot.git .
+          fi
 
-            cat > .env << 'EOF'
-            BASE_RPC_URL=${{ secrets.BASE_RPC_URL }}
-            LIQUID_FACTORY_ADDRESS=${{ secrets.LIQUID_FACTORY_ADDRESS }}
-            START_BLOCK=${{ secrets.START_BLOCK }}
-            TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
-            TELEGRAM_CHAT_ID=${{ secrets.TELEGRAM_CHAT_ID }}
-            IPFS_GATEWAY=${{ secrets.IPFS_GATEWAY }}
-            POLL_INTERVAL=${{ secrets.POLL_INTERVAL }}
-            EOF
+          cat > .env << EOFENV
+          BASE_RPC_URL=$BASE_RPC_URL
+          LIQUID_FACTORY_ADDRESS=$LIQUID_FACTORY_ADDRESS
+          START_BLOCK=$START_BLOCK
+          TELEGRAM_BOT_TOKEN=$TELEGRAM_BOT_TOKEN
+          TELEGRAM_CHAT_ID=$TELEGRAM_CHAT_ID
+          IPFS_GATEWAY=$IPFS_GATEWAY
+          POLL_INTERVAL=$POLL_INTERVAL
+          EOFENV
 
-            docker-compose down 2>/dev/null || true
-            docker-compose up -d --build
-            sleep 5
-            docker-compose logs bot | tail -20
+          docker-compose down 2>/dev/null || true
+          docker-compose up -d --build
+          sleep 5
+          docker-compose logs bot | tail -20
+          EOFSCRIPT
 
       - name: Notify success
         if: success()
@@ -52,6 +64,7 @@ jobs:
       - name: Notify failure
         if: failure()
         run: echo "❌ Deployment failed"
+
 
 
 
