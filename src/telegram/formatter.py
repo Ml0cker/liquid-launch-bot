@@ -45,6 +45,7 @@ class MessageFormatter:
 <b>Contract Address:</b>
 <code>{token.address}</code>
 
+💎 <a href="https://app.liquidprotocol.org/tokens/{token.address}">Liquid Protocol</a>
 🔍 <a href="{dex_link}">DEXScreener</a>
 📄 <a href="{basescan_link}">Contract</a>
 📋 <a href="{tx_link}">Transaction</a>"""
