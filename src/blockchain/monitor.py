@@ -92,45 +92,14 @@ class LiquidMonitor:
                 logger.error(f"Error processing event: {e}")
 
     async def start(self):
-        """Start monitoring loop"""
+        """Start monitoring loop — poll for new blocks every 2 seconds"""
         logger.info(f"Starting Liquid Protocol monitor from block {self.last_block}")
-
-        # If we're far behind, scan in batches of 1000 blocks
-        batch_size = 1000
-        current_block = self.get_latest_block()
-
-        if current_block - self.last_block > batch_size:
-            logger.info(f"Scanning {current_block - self.last_block} blocks in batches of {batch_size}")
-
-            while self.last_block < current_block:
-                try:
-                    to_block = min(self.last_block + batch_size, current_block)
-                    logger.debug(f"Batch scanning blocks {self.last_block + 1} to {to_block}")
-
-                    events = self.fetch_token_created_events(
-                        from_block=self.last_block + 1,
-                        to_block=to_block
-                    )
-
-                    if events:
-                        await self.process_events(events)
-
-                    self.last_block = to_block
-
-                except Exception as e:
-                    logger.error(f"Error in batch scan: {e}")
-                    await asyncio.sleep(self.config.POLL_INTERVAL)
-
-        # Now switch to normal polling
-        logger.info("Batch scan complete, switching to real-time polling")
 
         while True:
             try:
                 current_block = self.get_latest_block()
 
                 if current_block > self.last_block:
-                    logger.debug(f"Checking blocks {self.last_block + 1} to {current_block}")
-
                     events = self.fetch_token_created_events(
                         from_block=self.last_block + 1,
                         to_block=current_block
@@ -141,7 +110,6 @@ class LiquidMonitor:
 
                     self.last_block = current_block
 
-                # Wait before next poll
                 await asyncio.sleep(self.config.POLL_INTERVAL)
 
             except Exception as e:

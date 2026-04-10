@@ -20,7 +20,7 @@ class Config:
     IPFS_GATEWAY = os.getenv("IPFS_GATEWAY", "https://ipfs.io/ipfs/")
 
     # Polling
-    POLL_INTERVAL = int(os.getenv("POLL_INTERVAL", "12"))
+    POLL_INTERVAL = int(os.getenv("POLL_INTERVAL", "2"))
 
     # Database
     DB_PATH = "/app/data/tokens.db"
